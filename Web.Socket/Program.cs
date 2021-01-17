@@ -20,6 +20,11 @@ namespace Web.Socket
             Host.CreateDefaultBuilder(args)
                 .ConfigureWebHostDefaults(webBuilder =>
                 {
+                    webBuilder.UseKestrel((hosting, options) =>
+                    {
+                        options.ListenAnyIP(4900);
+                    });
+
                     webBuilder.UseStartup<Startup>();
                 });
     }

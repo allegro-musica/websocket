@@ -10,7 +10,13 @@ using Microsoft.OpenApi.Models;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 using System.Threading.Tasks;
+using MassTransit;
+using Quizzer.Domain.Events;
+using Web.Socket.Consumers;
+using Web.Socket.Hubs;
+using Web.Socket.Services;
 
 namespace Web.Socket
 {
@@ -26,25 +32,38 @@ namespace Web.Socket
         // This method gets called by the runtime. Use this method to add services to the container.
         public void ConfigureServices(IServiceCollection services)
         {
-
             services.AddControllers();
-            services.AddSwaggerGen(c =>
+            services.AddHttpClient<QuizService>();
+            services.AddSignalR(hub =>
             {
-                c.SwaggerDoc("v1", new OpenApiInfo { Title = "Web.Socket", Version = "v1" });
+                hub.KeepAliveInterval = TimeSpan.FromHours(1);
+                hub.EnableDetailedErrors = true;
+            });
+            services.AddMassTransit(x =>
+            {
+                x.AddConsumers(Assembly.GetEntryAssembly());
+
+                x.UsingRabbitMq((context, cfg) =>
+                {
+                    cfg.Host(Configuration.GetValue<string>("RabbitMQConnection", "rabbitmq://localhost"));
+                    
+                    cfg.ConfigureEndpoints(context);
+                });
             });
         }
 
         // This method gets called by the runtime. Use this method to configure the HTTP request pipeline.
-        public void Configure(IApplicationBuilder app, IWebHostEnvironment env)
+        public void Configure(IApplicationBuilder app, IWebHostEnvironment env, IServiceProvider provider)
         {
             if (env.IsDevelopment())
             {
                 app.UseDeveloperExceptionPage();
-                app.UseSwagger();
-                app.UseSwaggerUI(c => c.SwaggerEndpoint("/swagger/v1/swagger.json", "Web.Socket v1"));
+                
             }
 
-            app.UseHttpsRedirection();
+            var massTransit = provider.GetRequiredService<IBusControl>();
+
+            massTransit.StartAsync();
 
             app.UseRouting();
 
@@ -52,7 +71,7 @@ namespace Web.Socket
 
             app.UseEndpoints(endpoints =>
             {
-                endpoints.MapControllers();
+                endpoints.MapHub<QuizzerGateway>("/gateway");
             });
         }
     }
